@@ -9,11 +9,11 @@
 /// and then restarts.
 ///
 /// See the code for constants controlling these parameters.
-
 use panic_halt as _;
 
+use core::cell::RefCell;
+use cortex_m::{asm, interrupt::Mutex};
 use cortex_m_rt::entry;
-use microbit::Board;
 use microbit::hal::{
     clocks::Clocks,
     gpio,
@@ -23,6 +23,7 @@ use microbit::hal::{
     rtc::{Rtc, RtcInterrupt},
     time::Hertz,
 };
+use microbit::Board;
 
 // Ticks per second.
 const TICK: u32 = 64;
@@ -34,9 +35,6 @@ const HOLD_TIME: u32 = 5;
 // Values greater than 65_536 * STOP_FREQUENCY are not useful and
 // should be avoided.
 const DUTY: u32 = 65_536 * 23 / 5;
-
-use core::cell::RefCell;
-use cortex_m::{asm, interrupt::Mutex};
 
 static RTC: Mutex<RefCell<Option<Rtc<pac::RTC0>>>> = Mutex::new(RefCell::new(None));
 static SPEAKER: Mutex<RefCell<Option<pwm::Pwm<pac::PWM0>>>> = Mutex::new(RefCell::new(None));

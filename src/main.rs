@@ -14,12 +14,28 @@ fn main() -> ! {
     let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
 
     loop {
-        for v in [150u16, 300u16, 600, 900] {
+        for v in [30u16, 50, 150, 300, 400] {
+            let mut rng = fastrand::Rng::with_seed(0);
+            let dither: [bool; 500] = core::array::from_fn(|_| {
+                rng.f32() * 500.0 < v as f32
+            });
             for _ in 0..500 {
-                speaker.set_high().unwrap();
-                delay.delay_us(1024 - v);
-                speaker.set_low().unwrap();
-                delay.delay_us(v);
+                for b in dither {
+                    if b {
+                        speaker.set_high().unwrap();
+                    } else {
+                        speaker.set_low().unwrap();
+                    }
+                    delay.delay_us(1u8);
+                }
+                for b in dither {
+                    if !b {
+                        speaker.set_high().unwrap();
+                    } else {
+                        speaker.set_low().unwrap();
+                    }
+                    delay.delay_us(1u8);
+                }
             }
         }
     }

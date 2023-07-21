@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 cortex-m-rt = "0.7"
+fastrand = { version = "2.0.0", default-features = false }
 libm = "0.2.7"
 microbit-v2 = "0.13.0"
 panic-halt = "0.2.0"

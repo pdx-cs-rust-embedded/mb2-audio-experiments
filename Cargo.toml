@@ -7,3 +7,7 @@ edition = "2021"
 cortex-m-rt = "0.7"
 microbit-v2 = "0.13.0"
 panic-halt = "0.2.0"
+
+[dependencies.cortex-m]
+version = "0.7"
+features = ["inline-asm", "critical-section-single-core"]

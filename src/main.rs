@@ -30,9 +30,10 @@ const TICK: u32 = 64;
 const STOP_FREQUENCY: u32 = 500;
 // Time to hold at stop frequency in seconds.
 const HOLD_TIME: u32 = 5;
-// Duty cycle is 1 / DUTY. Must be at least 2. Values larger
-// than 4 are not apparently useful. So 2, 3, or 4.
-const DUTY: u16 = 4;
+// Duty cycle is 65_536 / DUTY. Value must be at least 2 * 65_536.
+// Values greater than 65_536 * STOP_FREQUENCY are not useful and
+// should be avoided.
+const DUTY: u32 = 65_536 * 23 / 5;
 
 use core::cell::RefCell;
 use cortex_m::{asm, interrupt::Mutex};
@@ -72,7 +73,8 @@ fn main() -> ! {
             .set_period(Hertz(1u32))
             // Configure for up and down counter mode
             .set_counter_mode(pwm::CounterMode::UpAndDown)
-            // Set maximum duty cycle
+            // Set initial maximum duty cycle. This will immediately
+            // be changed in the interrupt handler.
             .set_max_duty(32767)
             // enable PWM
             .enable();
@@ -126,8 +128,10 @@ fn RTC0() {
             }
 
             // Restart the PWM at duty cycle
-            let max_duty = speaker.max_duty();
-            speaker.set_duty_on_common(max_duty / DUTY);
+            let max_duty = speaker.max_duty() as u32;
+            let duty = max_duty * 65536 / DUTY;
+            let duty = duty.clamp(1, max_duty / 2);
+            speaker.set_duty_on_common(duty as u16);
 
             // Clear the RTC interrupt
             rtc.reset_event(RtcInterrupt::Tick);

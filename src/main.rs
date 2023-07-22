@@ -81,7 +81,7 @@ fn main() -> ! {
         // Set maximum duty cycle = PWM period in
         // ticks. 16MHz / 256 = 62_500, our desired sample
         // rate.
-        .set_max_duty(1000)
+        .set_max_duty(3824)
         // Set no delay between samples.
         .set_seq_refresh(pwm::Seq::Seq0, 0)
         // Set no delay at end of sequence.
@@ -95,7 +95,7 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    speaker.set_duty_on(pwm::Channel::C0, 500);
+    speaker.set_duty_on(pwm::Channel::C0, 3824 / 2);
     let _dma = speaker.start_seq(pwm::Seq::Seq0);
     // Start the sine wave.
     //let _dma = unsafe { speaker.load(Some(&SAMPLES), None::<&[u16]>, true).unwrap() };

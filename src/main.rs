@@ -31,10 +31,8 @@ const TICK: u32 = 64;
 const STOP_FREQUENCY: u32 = 500;
 // Time to hold at stop frequency in seconds.
 const HOLD_TIME: u32 = 5;
-// Duty cycle is 65_536 / DUTY. Value must be at least 2 * 65_536.
-// Values greater than 65_536 * STOP_FREQUENCY are not useful and
-// should be avoided.
-const DUTY: u32 = 65_536 * 23 / 5;
+// Duty cycle in percent. Must be at least 1 and no more than 50.
+const DUTY: u32 = 25;
 
 static RTC: Mutex<RefCell<Option<Rtc<pac::RTC0>>>> = Mutex::new(RefCell::new(None));
 static SPEAKER: Mutex<RefCell<Option<pwm::Pwm<pac::PWM0>>>> = Mutex::new(RefCell::new(None));
@@ -127,7 +125,7 @@ fn RTC0() {
 
             // Restart the PWM at duty cycle
             let max_duty = speaker.max_duty() as u32;
-            let duty = max_duty * 65536 / DUTY;
+            let duty = DUTY * max_duty / 100;
             let duty = duty.clamp(1, max_duty / 2);
             speaker.set_duty_on_common(duty as u16);
 

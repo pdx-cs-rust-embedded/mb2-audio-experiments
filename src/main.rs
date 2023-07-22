@@ -77,7 +77,7 @@ fn main() -> ! {
         // Configure for up counter mode.
         .set_counter_mode(pwm::CounterMode::Up)
         // Read duty cycle values from sequence.
-        .set_load_mode(pwm::LoadMode::Waveform)
+        .set_load_mode(pwm::LoadMode::Common)
         // Set maximum duty cycle = PWM period in
         // ticks. 16MHz / 256 = 62_500, our desired sample
         // rate.
@@ -88,11 +88,15 @@ fn main() -> ! {
         .set_seq_end_delay(pwm::Seq::Seq0, 0)
         // Keep playing forever.
         .loop_inf()
+        // Enable sample channel.
+        .enable_channel(pwm::Channel::C0)
+        // Enable sample group.
+        .enable_group(pwm::Group::G0)
         // Enable PWM.
         .enable();
 
     // Start the sine wave.
-    unsafe { speaker.load(Some(&SAMPLES), None::<&[u16]>, true).unwrap() };
+    let _dma = unsafe { speaker.load(Some(&SAMPLES), None::<&[u16]>, true).unwrap() };
 
     loop {
         asm::wfi();

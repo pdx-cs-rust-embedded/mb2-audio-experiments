@@ -19,7 +19,7 @@
 /// might actually be better but without modeling the output
 /// filtering would more likely be garbage.
 
-use panic_halt as _;
+use panic_rtt_target as _;
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
@@ -29,6 +29,7 @@ use microbit::hal::{
     pwm,
 };
 use microbit::Board;
+use rtt_target::rtt_init_print;
 
 /// Fill `samples` with a full cycle of samples of a sine
 /// wave, with samples quantized to `q`-1 *values* 0..`q`.
@@ -45,9 +46,11 @@ fn sine(samples: &mut [u16], q: u16) {
 
 #[entry]
 fn main() -> ! {
+    rtt_init_print!();
+
     // actual frequency with 60 samples is 1041.7 Hz. Can live with it.
     static mut SAMPLES: [u16; 60] = [0u16; 60];
-    sine(SAMPLES, 256);
+    unsafe { sine(&mut SAMPLES, 256) };
 
     let board = Board::take().unwrap();
 
@@ -89,7 +92,7 @@ fn main() -> ! {
         .enable();
 
     // Start the sine wave.
-    speaker.load(Some(SAMPLES), None::<&[u16]>, true).unwrap();
+    unsafe { speaker.load(Some(&SAMPLES), None::<&[u16]>, true).unwrap() };
 
     loop {
         asm::wfi();

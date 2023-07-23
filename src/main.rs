@@ -29,18 +29,20 @@ use microbit::hal::{
     pwm,
 };
 use microbit::Board;
-use rtt_target::rtt_init_print;
+use rtt_target::{rprintln, rtt_init_print};
 
 /// Fill `samples` with a full cycle of samples of a sine
-/// wave, with samples quantized to `q`-1 *values* 0..`q`.
+/// wave, with samples quantized to `q` *values* 0..`q`-1.
 fn sine(samples: &mut [u16], q: u16) {
     use core::f32::consts::PI;
     let step = 2.0 * PI / samples.len() as f32;
     for (i, s) in samples.iter_mut().enumerate() {
-        // Get a value in the range 0.0..1.0.
-        let v = (libm::sinf(i as f32 * step) + 1.0) / 2.0;
-        // Save a value in the range 0..=q.
-        *s = libm::floorf((q - 1) as f32 * v + 0.5) as u16;
+        // Get the next value.
+        let v = libm::sinf(i as f32 * step);
+        // Normalize to the range 0.0..=q-1.
+        let v = (q - 1) as f32 * (v + 1.0) / 2.0;
+        // Save a value in the range 0..=q-1.
+        *s = libm::floorf(v + 0.5) as u16;
     }
 }
 
@@ -49,8 +51,8 @@ fn main() -> ! {
     rtt_init_print!();
 
     // actual frequency with 60 samples is 1041.7 Hz. Can live with it.
-    static mut SAMPLES: [u16; 60] = [0u16; 60];
-    unsafe { sine(&mut SAMPLES, 256) };
+    //static mut SAMPLES: [u16; 60] = [0u16; 60];
+    //unsafe { sine(&mut SAMPLES, 256) };
 
     let board = Board::take().unwrap();
 
@@ -73,32 +75,31 @@ fn main() -> ! {
         // output the waveform on the speaker pin
         .set_output_pin(pwm::Channel::C0, speaker_pin.degrade())
         // Prescaler set for 16MHz.
-        .set_prescaler(pwm::Prescaler::Div16)
+        .set_prescaler(pwm::Prescaler::Div32)
         // Configure for up counter mode.
         .set_counter_mode(pwm::CounterMode::Up)
         // Read duty cycle values from sequence.
-        .set_load_mode(pwm::LoadMode::Individual)
-        // Set maximum duty cycle = PWM period in
-        // ticks. 16MHz / 256 = 62_500, our desired sample
-        // rate.
-        .set_max_duty(3824)
+        .set_load_mode(pwm::LoadMode::Common)
+        // Set maximum duty cycle = PWM period in ticks.
+        .set_max_duty(256)
         // Set no delay between samples.
         .set_seq_refresh(pwm::Seq::Seq0, 0)
         // Set no delay at end of sequence.
         .set_seq_end_delay(pwm::Seq::Seq0, 0)
-        // Keep playing forever.
-        .loop_inf()
         // Enable sample channel.
         .enable_channel(pwm::Channel::C0)
         // Enable sample group.
         .enable_group(pwm::Group::G0)
+        // Keep playing forever.
+        .loop_inf()
         // Enable PWM.
         .enable();
 
-    speaker.set_duty_on(pwm::Channel::C0, 3824 / 2);
-    let _dma = speaker.start_seq(pwm::Seq::Seq0);
+    static mut SAMPS: [u16; 240] = [256 / 2; 240];
+    unsafe { sine(&mut SAMPS, 256) };
+
     // Start the sine wave.
-    //let _dma = unsafe { speaker.load(Some(&SAMPLES), None::<&[u16]>, true).unwrap() };
+    let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), None::<&[u16]>, true).unwrap() };
 
     loop {
         asm::wfi();

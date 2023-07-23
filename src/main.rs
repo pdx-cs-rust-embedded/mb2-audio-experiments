@@ -63,7 +63,11 @@ fn main() -> ! {
         .start_lfclk();
 
     // Set up the speaker GPIO pin as an output.
+    #[cfg(not(feature = "external_out"))]
     let speaker_pin = board.speaker_pin.into_push_pull_output(gpio::Level::Low);
+    #[cfg(feature = "external_out")]
+    // Send output to edge connector P0 instead of speaker pin.
+    let speaker_pin = board.pins.p0_02.into_push_pull_output(gpio::Level::Low);
 
     // Use the PWM peripheral to generate a waveform for the speaker
     // The base counter rate for the PWM is 16MHz.
@@ -75,17 +79,23 @@ fn main() -> ! {
         // output the waveform on the speaker pin
         .set_output_pin(pwm::Channel::C0, speaker_pin.degrade())
         // Prescaler set for 16MHz.
-        .set_prescaler(pwm::Prescaler::Div32)
+        .set_prescaler(pwm::Prescaler::Div1)
         // Configure for up counter mode.
         .set_counter_mode(pwm::CounterMode::Up)
         // Read duty cycle values from sequence.
         .set_load_mode(pwm::LoadMode::Common)
+        // Be sure to be advancing the thing.
+        .set_step_mode(pwm::StepMode::Auto)
         // Set maximum duty cycle = PWM period in ticks.
         .set_max_duty(256)
         // Set no delay between samples.
         .set_seq_refresh(pwm::Seq::Seq0, 0)
         // Set no delay at end of sequence.
         .set_seq_end_delay(pwm::Seq::Seq0, 0)
+        // Set no delay between samples.
+        .set_seq_refresh(pwm::Seq::Seq1, 0)
+        // Set no delay at end of sequence.
+        .set_seq_end_delay(pwm::Seq::Seq1, 0)
         // Enable sample channel.
         .enable_channel(pwm::Channel::C0)
         // Enable sample group.
@@ -95,11 +105,12 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    static mut SAMPS: [u16; 240] = [256 / 2; 240];
+    // speaker.set_duty_on(pwm::Channel::C0, 128);
+    static mut SAMPS: [u16; 60] = [0; 60];
     unsafe { sine(&mut SAMPS, 256) };
 
     // Start the sine wave.
-    let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), None::<&[u16]>, true).unwrap() };
+    let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), Some(&SAMPS), true).unwrap() };
 
     loop {
         asm::wfi();

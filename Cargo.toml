@@ -16,3 +16,6 @@ features = ["cortex-m"]
 [dependencies.cortex-m]
 version = "0.7"
 features = ["inline-asm", "critical-section-single-core"]
+
+[features]
+external_out = []

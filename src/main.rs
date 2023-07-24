@@ -18,6 +18,10 @@
 /// with one bit per sample sigma-delta at 16MHz, which
 /// might actually be better but without modeling the output
 /// filtering would more likely be garbage.
+///
+/// If the Cargo feature `external_out` is enabled, this
+/// code will output to P0 on the MB2 edge connector instead
+/// of the speaker.
 
 use panic_rtt_target as _;
 
@@ -105,9 +109,41 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    // speaker.set_duty_on(pwm::Channel::C0, 128);
+    // The `unsafe`s here are to assure the Rust compiler
+    // that nothing else is going to mess with this buffer
+    // while a mutable reference is held.
+    //
+    // Safety: Because we are single-threaded, the only
+    // thing that can access `SAMPS` once created is the HW
+    // PWM unit, and it will be read-only access.
+
+    // Set up the sine wave. This has to be in RAM for the
+    // PWM unit to access it. It needs to be a 16-bit buffer
+    // even though we will have only 8-bit (ish) sample
+    // resolution.
     static mut SAMPS: [u16; 60] = [0; 60];
-    unsafe { sine(&mut SAMPS, 256) };
+    unsafe {
+        // We generate the sine wave with a little
+        // "headroom": want all values between 1 and 254 to
+        // make sure the HW PWM doesn't get lost and does
+        // output some energy on every cycle.
+        sine(&mut SAMPS, 254);
+        for s in &mut SAMPS {
+            // Adjust for the headroom as above.
+            *s += 1;
+            assert!(*s > 0);
+            assert!(*s < 255);
+            // The default counter mode is to set low up to
+            // the count, then set high until the end of the
+            // cycle. Setting the high bit in the count
+            // register inverts this (and is otherwise
+            // ignored), giving a "right-side-up" sine wave.
+            //
+            // We could instead complement all the sine
+            // values, but either way works.
+            *s |= 0x8000;
+        }
+    };
 
     // Start the sine wave.
     let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), Some(&SAMPS), true).unwrap() };

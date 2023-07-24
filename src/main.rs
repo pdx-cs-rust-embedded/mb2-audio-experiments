@@ -27,13 +27,9 @@ use panic_rtt_target as _;
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
-use microbit::hal::{
-    clocks::Clocks,
-    gpio,
-    pwm,
-};
+use microbit::hal::{gpio, pwm};
 use microbit::Board;
-use rtt_target::{rprintln, rtt_init_print};
+use rtt_target::rtt_init_print;
 
 /// Fill `samples` with a full cycle of samples of a sine
 /// wave, with samples quantized to `q` *values* 0..`q`-1.
@@ -53,18 +49,7 @@ fn sine(samples: &mut [u16], q: u16) {
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
-
-    // actual frequency with 60 samples is 1041.7 Hz. Can live with it.
-    //static mut SAMPLES: [u16; 60] = [0u16; 60];
-    //unsafe { sine(&mut SAMPLES, 256) };
-
     let board = Board::take().unwrap();
-
-    // The LF CLK (16MHz) signal is used for PWM.
-    let _clocks = Clocks::new(board.CLOCK)
-        .enable_ext_hfosc()
-        .set_lfclk_src_synth()
-        .start_lfclk();
 
     // Set up the speaker GPIO pin as an output.
     #[cfg(not(feature = "external_out"))]

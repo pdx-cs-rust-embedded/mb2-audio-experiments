@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 cortex-m-rt = "0.7"
-microbit-v2 = "0.13.0"
 panic-halt = "0.2.0"
+#microbit-v2 = "0.13.0"
+microbit-v2 = { path = "/local/src/old/microbit/microbit-v2" }
+
+

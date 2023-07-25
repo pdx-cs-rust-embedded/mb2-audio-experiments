@@ -64,7 +64,10 @@ fn main() -> ! {
 
     // Set up the speaker GPIO pin as an output.
     #[cfg(not(feature = "external_out"))]
-    let speaker_pin = board.speaker_pin;
+    let speaker_pin = board.speaker_pin.into_push_pull_output_drive(
+        gpio::Level::Low,
+        gpio::DriveConfig::HighDrive0HighDrive1,
+    );
     #[cfg(feature = "external_out")]
     // Send output to edge connector P0 instead of speaker pin.
     let speaker_pin = board.pins.p0_02;

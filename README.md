@@ -12,7 +12,7 @@ This emits a C6 at around 1042Hz, which is supposed to be a
 sine wave, but is pretty janky. Here is Audacity showing the
 speaker output via a good reference microphone.
 
-![Speaker output from HW PWM](mb2-hw-rng-c6.png)
+![Speaker output from HW PWM](mb2-c6.png)
 
 The software apparently still needs work: I suspect that
 glitch every cycle can be corrected with some work.

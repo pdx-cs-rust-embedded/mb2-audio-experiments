@@ -3,8 +3,9 @@
 
 /// This uses code from the microbit crate speaker-v2 demo.
 ///
-/// This demo plays 8-bit audio — a roughly 1046.5Hz C6 —
-/// out the speaker via high-frequency hardware PWM.
+/// This demo plays 8-bit audio — a sample hard-compiled
+/// into the code — out the speaker via high-frequency
+/// hardware PWM.
 ///
 /// The chipping rate for the PWM (and thus the "sample
 /// rate" for the audio) is 62.5K samples/second. This means
@@ -31,19 +32,26 @@ use microbit::hal::{gpio, pwm};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
-/// Fill `samples` with a full cycle of samples of a sine
-/// wave, with samples quantized to `q` *values* 0..`q`-1.
-fn sine(samples: &mut [u16], q: u16) {
-    use core::f32::consts::PI;
-    let step = 2.0 * PI / samples.len() as f32;
-    for (i, s) in samples.iter_mut().enumerate() {
-        // Get the next value.
-        let v = libm::sinf(i as f32 * step);
-        // Normalize to the range 0.0..=q-1.
-        let v = (q - 1) as f32 * (v + 1.0) / 2.0;
-        // Save a value in the range 0..=q-1.
-        *s = libm::floorf(v + 0.5) as u16;
-    }
+static SAMPLE: &[u8] = include_bytes!("sample.u8");
+const BLOCK_SIZE: usize = 4096;
+
+fn blocks() -> impl Iterator<Item = [u8; BLOCK_SIZE]> {
+    let mut index = 0;
+    let nsample = SAMPLE.len();
+    core::iter::from_fn(move || {
+        if index >= nsample {
+            return None;
+        }
+        let mut block = [0; BLOCK_SIZE];
+        if index + BLOCK_SIZE > nsample {
+            let rest = &SAMPLE[index..];
+            block[..rest.len()].copy_from_slice(&rest);
+        } else {
+            block.copy_from_slice(&SAMPLE[index..index + BLOCK_SIZE]);
+        };
+        index += BLOCK_SIZE;
+        Some(block)
+    })
 }
 
 #[entry]
@@ -53,10 +61,11 @@ fn main() -> ! {
 
     // Set up the speaker GPIO pin as an output.
     #[cfg(not(feature = "external_out"))]
-    let speaker_pin = board.speaker_pin.into_push_pull_output(gpio::Level::Low);
+    let speaker_pin = board.speaker_pin;
     #[cfg(feature = "external_out")]
     // Send output to edge connector P0 instead of speaker pin.
-    let speaker_pin = board.pins.p0_02.into_push_pull_output(gpio::Level::Low);
+    let speaker_pin = board.pins.p0_02;
+    let speaker_pin = speaker_pin.into_push_pull_output(gpio::Level::High);
 
     // Use the PWM peripheral to generate a waveform for the speaker
     // The base counter rate for the PWM is 16MHz.
@@ -102,33 +111,11 @@ fn main() -> ! {
     // thing that can access `SAMPS` once created is the HW
     // PWM unit, and it will be read-only access.
 
-    // Set up the sine wave. This has to be in RAM for the
+    // Set up the wave. This has to be in RAM for the
     // PWM unit to access it. It needs to be a 16-bit buffer
     // even though we will have only 8-bit (ish) sample
     // resolution.
-    static mut SAMPS: [u16; 60] = [0; 60];
-    unsafe {
-        // We generate the sine wave with a little
-        // "headroom": want all values between 1 and 254 to
-        // make sure the HW PWM doesn't get lost and does
-        // output some energy on every cycle.
-        sine(&mut SAMPS, 254);
-        for s in &mut SAMPS {
-            // Adjust for the headroom as above.
-            *s += 1;
-            assert!(*s > 0);
-            assert!(*s < 255);
-            // The default counter mode is to set low up to
-            // the count, then set high until the end of the
-            // cycle. Setting the high bit in the count
-            // register inverts this (and is otherwise
-            // ignored), giving a "right-side-up" sine wave.
-            //
-            // We could instead complement all the sine
-            // values, but either way works.
-            *s |= 0x8000;
-        }
-    };
+    static mut SAMPS: [u16; BLOCK_SIZE] = [0; BLOCK_SIZE];
 
     // Start the sine wave.
     let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), Some(&SAMPS), true).unwrap() };

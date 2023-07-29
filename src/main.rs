@@ -1,6 +1,9 @@
 #![no_main]
 #![no_std]
 
+mod resample;
+use resample::resample;
+
 /// This uses code from the microbit crate speaker-v2 demo.
 ///
 /// This demo plays 8-bit audio — a sample hard-compiled
@@ -33,27 +36,16 @@ use microbit::Board;
 use rtt_target::rtt_init_print;
 
 static SAMPLE: &[u8] = include_bytes!("sample.u8");
-const BLOCK_SIZE: usize = 4096;
+const BLOCK_SIZE: usize = 16384;
 
-fn blocks() -> impl Iterator<Item = [u8; BLOCK_SIZE]> {
-    let mut index = 0;
-    let nsample = SAMPLE.len();
-    core::iter::from_fn(move || {
-        if index >= nsample {
-            return None;
-        }
-        let mut block = [0; BLOCK_SIZE];
-        if index + BLOCK_SIZE > nsample {
-            let rest = &SAMPLE[index..];
-            block[..rest.len()].copy_from_slice(&rest);
-        } else {
-            block.copy_from_slice(&SAMPLE[index..index + BLOCK_SIZE]);
-        };
-        index += BLOCK_SIZE;
-        Some(block)
-    })
+fn fill_array<I>(x: &mut I, a: &mut [u16])
+    where I: Iterator<Item=u16>
+{
+    for v in a {
+        *v = x.next().unwrap();
+    }
 }
-
+   
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
@@ -103,6 +95,10 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
+    // Get an iterator over the sample to be played.
+    let mut sample = resample(SAMPLE.iter().cloned()).
+        map(|s| s as u16 | 0x8000);
+
     // The `unsafe`s here are to assure the Rust compiler
     // that nothing else is going to mess with this buffer
     // while a mutable reference is held.
@@ -115,10 +111,16 @@ fn main() -> ! {
     // PWM unit to access it. It needs to be a 16-bit buffer
     // even though we will have only 8-bit (ish) sample
     // resolution.
-    static mut SAMPS: [u16; BLOCK_SIZE] = [0; BLOCK_SIZE];
+    static mut SAMPS: [[u16; BLOCK_SIZE]; 2] = [[0; BLOCK_SIZE]; 2];
 
-    // Start the sine wave.
-    let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), Some(&SAMPS), true).unwrap() };
+    unsafe { 
+        for samp in &mut SAMPS {
+            fill_array(&mut sample, samp);
+        }
+
+        // Start the sine wave.
+        let _pwm_seq = speaker.load(Some(&SAMPS[0]), Some(&SAMPS[1]), true).unwrap();
+    }
 
     loop {
         asm::wfi();

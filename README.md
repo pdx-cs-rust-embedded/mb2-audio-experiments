@@ -8,7 +8,7 @@ that sort of works. This uses the PWM interface on the MB2
 to generate the sine wave: 8 bits at 62.5K samples per
 second.
 
-This emits a C6 at around 1042Hz, which is supposed to be a
+This emits a C6 at around 1043Hz, which is supposed to be a
 sine wave, but is pretty janky. Here is Audacity showing the
 speaker output via a good reference microphone.
 

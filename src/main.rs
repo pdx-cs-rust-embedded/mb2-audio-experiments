@@ -3,7 +3,7 @@
 
 /// This uses code from the microbit crate speaker-v2 demo.
 ///
-/// This demo plays 8-bit audio — a roughly 1046.5Hz C6 —
+/// This demo plays 8-bit audio — a roughly 1043Hz C6 —
 /// out the speaker via high-frequency hardware PWM.
 ///
 /// The chipping rate for the PWM (and thus the "sample
@@ -31,11 +31,11 @@ use microbit::hal::{gpio, pwm};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
-/// Fill `samples` with a full cycle of samples of a sine
+/// Fill `samples` with `n` full cycles of samples of a sine
 /// wave, with samples quantized to `q` *values* 0..`q`-1.
-fn sine(samples: &mut [u16], q: u16) {
+fn sine(samples: &mut [u16], q: u16, n: usize) {
     use core::f32::consts::PI;
-    let step = 2.0 * PI / samples.len() as f32;
+    let step = 2.0 * PI * n as f32 / samples.len() as f32;
     for (i, s) in samples.iter_mut().enumerate() {
         // Get the next value.
         let v = libm::sinf(i as f32 * step);
@@ -106,18 +106,14 @@ fn main() -> ! {
     // PWM unit to access it. It needs to be a 16-bit buffer
     // even though we will have only 8-bit (ish) sample
     // resolution.
-    static mut SAMPS: [u16; 60] = [0; 60];
+    static mut SAMPS: [u16; 240] = [0; 240];
     unsafe {
         // We generate the sine wave with a little
         // "headroom": want all values between 1 and 254 to
         // make sure the HW PWM doesn't get lost and does
         // output some energy on every cycle.
-        sine(&mut SAMPS, 254);
+        sine(&mut SAMPS, 256, 4);
         for s in &mut SAMPS {
-            // Adjust for the headroom as above.
-            *s += 1;
-            assert!(*s > 0);
-            assert!(*s < 255);
             // The default counter mode is to set low up to
             // the count, then set high until the end of the
             // cycle. Setting the high bit in the count

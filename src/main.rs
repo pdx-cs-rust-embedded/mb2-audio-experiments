@@ -29,10 +29,9 @@ use resample::resample;
 
 use panic_rtt_target as _;
 
-use cortex_m::asm;
+//use cortex_m::asm;
 use cortex_m_rt::entry;
-use microbit::hal::{gpio, pwm};
-use microbit::Board;
+use microbit::{Board, hal::{gpio, pwm}, pac::interrupt};
 use rtt_target::{rprintln, rtt_init_print};
 
 // 8-bit unsigned audio data at 3906 samples per second.
@@ -70,6 +69,9 @@ fn main() -> ! {
     let speaker_pin = board.pins.p0_02;
     let speaker_pin = speaker_pin.into_push_pull_output(gpio::Level::High);
 
+    let seq0_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+    let seq1_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq1);
+
     // Use the PWM peripheral to generate a waveform for the speaker
     // The base counter rate for the PWM is 16MHz.
     // https://jimmywongiot.com/2021/06/01/advanced-pulse-width-modulation-pwm-on-nordic-nrf52-series/
@@ -103,6 +105,10 @@ fn main() -> ! {
         .enable_group(pwm::Group::G0)
         // Keep playing forever.
         .loop_inf()
+        // Interrupt when done with seq0.
+        .enable_interrupt(seq0_event)
+        // Interrupt when done with seq1.
+        .enable_interrupt(seq1_event)
         // Enable PWM.
         .enable();
 
@@ -130,14 +136,11 @@ fn main() -> ! {
         speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
     };
 
-    let seq0_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
-    let seq1_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq1);
     loop {
         dma.reset_event(seq0_event);
         dma.reset_event(seq1_event);
-        //rprintln!("wfe");
-        //asm::wfe();
         while !dma.is_event_triggered(seq0_event) && !dma.is_event_triggered(seq1_event) {};
+        //asm::wfi();
         if dma.is_event_triggered(seq0_event) {
             unsafe { fill_array(&mut sample, &mut BUFFERS[0]) };
         }
@@ -145,4 +148,9 @@ fn main() -> ! {
             unsafe { fill_array(&mut sample, &mut BUFFERS[1]) };
         }
     }
+}
+
+#[interrupt]
+fn PWM0() {
+    rprintln!("interrupt");
 }

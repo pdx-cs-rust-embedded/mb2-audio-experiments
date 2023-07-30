@@ -33,9 +33,18 @@ use cortex_m::asm;
 use cortex_m_rt::entry;
 use microbit::hal::{gpio, pwm};
 use microbit::Board;
-use rtt_target::rtt_init_print;
+use rtt_target::{rprintln, rtt_init_print};
 
+// 8-bit unsigned audio data at 3906 samples per second.
+// 16× upsampling gives 62_496 samples per second rate,
+// which is "close enough" to the native sample rate of
+// 62_500 sps.
 static SAMPLE: &[u8] = include_bytes!("sample.u8");
+
+// This has to be in RAM for the PWM unit to access it. It
+// needs to be a 16-bit buffer even though we will have only
+// 8-bit sample resolution.
+static mut BUFFERS: [[u16; BLOCK_SIZE]; 2] = [[0; BLOCK_SIZE]; 2];
 const BLOCK_SIZE: usize = 16384;
 
 fn fill_array<I>(x: &mut I, a: &mut [u16])
@@ -45,6 +54,8 @@ fn fill_array<I>(x: &mut I, a: &mut [u16])
         *v = x.next().unwrap();
     }
 }
+
+
    
 #[entry]
 fn main() -> ! {
@@ -95,9 +106,11 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    // Get an iterator over the sample to be played.
-    let mut sample = resample(SAMPLE.iter().cloned()).
-        map(|s| s as u16 | 0x8000);
+    // Get an iterator over the sample to be played,
+    // followed by zeros.
+    let mut sample = resample(SAMPLE.iter().cloned())
+        .map(|s| s as u16 | 0x8000)
+        .chain(core::iter::repeat(0u16));
 
     // The `unsafe`s here are to assure the Rust compiler
     // that nothing else is going to mess with this buffer
@@ -107,22 +120,29 @@ fn main() -> ! {
     // thing that can access `SAMPS` once created is the HW
     // PWM unit, and it will be read-only access.
 
-    // Set up the wave. This has to be in RAM for the
-    // PWM unit to access it. It needs to be a 16-bit buffer
-    // even though we will have only 8-bit (ish) sample
-    // resolution.
-    static mut SAMPS: [[u16; BLOCK_SIZE]; 2] = [[0; BLOCK_SIZE]; 2];
 
-    unsafe { 
-        for samp in &mut SAMPS {
-            fill_array(&mut sample, samp);
+    let dma = unsafe { 
+        for buffer in &mut BUFFERS {
+            fill_array(&mut sample, buffer);
         }
 
         // Start the sine wave.
-        let _pwm_seq = speaker.load(Some(&SAMPS[0]), Some(&SAMPS[1]), true).unwrap();
-    }
+        speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
+    };
 
+    let seq0_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+    let seq1_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq1);
     loop {
-        asm::wfi();
+        dma.reset_event(seq0_event);
+        dma.reset_event(seq1_event);
+        //rprintln!("wfe");
+        //asm::wfe();
+        while !dma.is_event_triggered(seq0_event) && !dma.is_event_triggered(seq1_event) {};
+        if dma.is_event_triggered(seq0_event) {
+            unsafe { fill_array(&mut sample, &mut BUFFERS[0]) };
+        }
+        if dma.is_event_triggered(seq1_event) {
+            unsafe { fill_array(&mut sample, &mut BUFFERS[1]) };
+        }
     }
 }

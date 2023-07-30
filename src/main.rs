@@ -29,9 +29,9 @@ use resample::resample;
 
 use panic_rtt_target as _;
 
-//use cortex_m::asm;
+use cortex_m::asm;
 use cortex_m_rt::entry;
-use microbit::{Board, hal::{gpio, pwm}, pac::interrupt};
+use microbit::{Board, hal::{gpio, pwm}, pac::{self, interrupt}};
 use rtt_target::{rprintln, rtt_init_print};
 
 // 8-bit unsigned audio data at 3906 samples per second.
@@ -69,15 +69,15 @@ fn main() -> ! {
     let speaker_pin = board.pins.p0_02;
     let speaker_pin = speaker_pin.into_push_pull_output(gpio::Level::High);
 
-    let seq0_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
-    let seq1_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq1);
+    let event_seq0_end = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+    let event_seq1_end = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq1);
 
     // Use the PWM peripheral to generate a waveform for the speaker
     // The base counter rate for the PWM is 16MHz.
     // https://jimmywongiot.com/2021/06/01/advanced-pulse-width-modulation-pwm-on-nordic-nrf52-series/
     // This lets us run at 62500 sps with 256 ticks per sample, since 62500 * 256 = 16M.
     // We can thus run 8-bit samples at this rate.
-    let speaker = pwm::Pwm::new(board.PWM0);
+    let speaker = pwm::Pwm::new(board.PWM1);
     speaker
         // output the waveform on the speaker pin
         .set_output_pin(pwm::Channel::C0, speaker_pin.degrade())
@@ -106,9 +106,9 @@ fn main() -> ! {
         // Keep playing forever.
         .loop_inf()
         // Interrupt when done with seq0.
-        .enable_interrupt(seq0_event)
+        .enable_interrupt(event_seq0_end)
         // Interrupt when done with seq1.
-        .enable_interrupt(seq1_event)
+        .enable_interrupt(event_seq1_end)
         // Enable PWM.
         .enable();
 
@@ -118,39 +118,54 @@ fn main() -> ! {
         .map(|s| s as u16 | 0x8000)
         .chain(core::iter::repeat(0u16));
 
-    // The `unsafe`s here are to assure the Rust compiler
-    // that nothing else is going to mess with this buffer
-    // while a mutable reference is held.
-    //
-    // Safety: Because we are single-threaded, the only
-    // thing that can access `SAMPS` once created is the HW
-    // PWM unit, and it will be read-only access.
+    let dma = cortex_m::interrupt::free(|_cs| {
+        /* Enable PWM interrupts */
+        //unsafe { pac::NVIC::unmask(pac::Interrupt::PWM1) };
+        //pac::NVIC::unpend(pac::Interrupt::PWM1);
+        //rprintln!("unmasked");
+
+        // The `unsafe`s here are to assure the Rust compiler
+        // that nothing else is going to mess with this buffer
+        // while a mutable reference is held.
+        //
+        // Safety: Because we are single-threaded, the only
+        // thing that can access `SAMPS` once created is the HW
+        // PWM unit, and it will be read-only access.
 
 
-    let dma = unsafe { 
-        for buffer in &mut BUFFERS {
-            fill_array(&mut sample, buffer);
+        speaker.reset_event(event_seq0_end);
+        speaker.reset_event(event_seq1_end);
+        unsafe { 
+            for buffer in &mut BUFFERS {
+                fill_array(&mut sample, buffer);
+            }
+
+            // Start the sine wave.
+            speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
         }
+    });
 
-        // Start the sine wave.
-        speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
-    };
-
+    //rprintln!("loop...");
     loop {
-        dma.reset_event(seq0_event);
-        dma.reset_event(seq1_event);
-        while !dma.is_event_triggered(seq0_event) && !dma.is_event_triggered(seq1_event) {};
+        while !dma.is_event_triggered(event_seq0_end) && !dma.is_event_triggered(event_seq1_end) {};
         //asm::wfi();
-        if dma.is_event_triggered(seq0_event) {
+        rprintln!("awake");
+        if dma.is_event_triggered(event_seq0_end) {
             unsafe { fill_array(&mut sample, &mut BUFFERS[0]) };
+            dma.reset_event(event_seq0_end);
         }
-        if dma.is_event_triggered(seq1_event) {
+        if dma.is_event_triggered(event_seq1_end) {
             unsafe { fill_array(&mut sample, &mut BUFFERS[1]) };
+            dma.reset_event(event_seq1_end);
         }
     }
 }
 
 #[interrupt]
-fn PWM0() {
-    rprintln!("interrupt");
+fn PWM1() {
+    static mut INTERRUPTED: bool = false;
+    if !*INTERRUPTED {
+        //rprintln!("interrupt");
+        *INTERRUPTED = true;
+    }
 }

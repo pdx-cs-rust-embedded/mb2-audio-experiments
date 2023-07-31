@@ -1,24 +1,8 @@
-// Interpolate `n` - 1 0.0-s after every element of `x`.
-fn interpolate_zeros(mut x: impl Iterator<Item=f32>, n: usize) ->
-    impl Iterator<Item=f32>
-{
-    let mut i = 0;
-    core::iter::from_fn(move || {
-        if i % n == 0 {
-            i += 1;
-            x.next()
-        } else {
-            i = (i + 1) % n;
-            Some(0.0)
-        }
-    })
-}
-
-// signal.iirfilter(4, 1/16, rs=40, btype='lowpass', ftype='butter', output='sos')
-
 // Fourth-order Butterworth 1/16-band lowpass filter as
 // sequential second-order sections.  From Python
-// scipy.signal.iirfilter
+// scipy.signal.iirfilter:
+//
+// signal.iirfilter(4, 1/16, rs=40, btype='lowpass', ftype='butter', output='sos')
 #[allow(clippy::excessive_precision)]
 const COEFFS: [[[f32; 3]; 2]; 2] = [
     [
@@ -54,6 +38,33 @@ fn section(
         y0
     })
 }
+
+pub struct Upsample16 {
+    i_dest: usize,
+    i_source: usize,
+    source: &'static [f32],
+}
+
+impl Upsample16 {
+    pub fn new(source: &'static f32) -> Self {
+        Upsample16 { i_dest: 0, i_source: 0, source }
+    }
+
+    pub fn fill(&mut self, &mut dest) -> bool {
+        for s_out in dest {
+            let out = if self.i_out == 0 && self.i_in < self.source.len() {
+                self.i_in += 1;
+                16.0 * (self.source[self.i_in - 1] as f32 - 128.0)
+            } else {
+                0.0
+            };
+            self.i_out = (self.i_out + 1) % 16;
+        }
+        self.i_in < self.source.len()
+    }
+}
+
+
 
 // Two-stage sequential SOS filter.
 fn filter(x: impl Iterator<Item=f32>) -> impl Iterator<Item=f32> {

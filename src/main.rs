@@ -40,11 +40,13 @@ use rtt_target::{rprintln, rtt_init_print};
 // 62_500 sps.
 static SAMPLE: &[u8] = include_bytes!("sample.u8");
 
+// Buffer 0.25 seconds of audio at in each half-buffer at
+// 62_500 sps.
+const BLOCK_SIZE: usize = 15625;
 // This has to be in RAM for the PWM unit to access it. It
 // needs to be a 16-bit buffer even though we will have only
 // 8-bit sample resolution.
 static mut BUFFERS: [[u16; BLOCK_SIZE]; 2] = [[0; BLOCK_SIZE]; 2];
-const BLOCK_SIZE: usize = 16384;
 
 fn fill_array<I>(x: &mut I, a: &mut [u16])
     where I: Iterator<Item=u16>
@@ -53,8 +55,6 @@ fn fill_array<I>(x: &mut I, a: &mut [u16])
         *v = x.next().unwrap();
     }
 }
-
-
    
 #[entry]
 fn main() -> ! {
@@ -119,9 +119,6 @@ fn main() -> ! {
         .chain(core::iter::repeat(0u16));
 
     let dma = cortex_m::interrupt::free(|_cs| {
-        /* Enable PWM interrupts */
-        //unsafe { pac::NVIC::unmask(pac::Interrupt::PWM1) };
-        //pac::NVIC::unpend(pac::Interrupt::PWM1);
         //rprintln!("unmasked");
 
         // The `unsafe`s here are to assure the Rust compiler
@@ -143,6 +140,10 @@ fn main() -> ! {
             // Start the sine wave.
             speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
         }
+
+        /* Enable PWM interrupts */
+        unsafe { pac::NVIC::unmask(pac::Interrupt::PWM1) };
+        pac::NVIC::unpend(pac::Interrupt::PWM1);
     });
 
     //rprintln!("loop...");

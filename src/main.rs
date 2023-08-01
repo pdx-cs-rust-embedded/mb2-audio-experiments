@@ -12,10 +12,13 @@ fn main() -> ! {
     let board = Board::take().unwrap();
     let mut delay = Delay::new(board.SYST);
     let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
+    let button = board.buttons.button_a;
     loop {
-        speaker.set_high().unwrap();
-        delay.delay_us(500u16);
-        speaker.set_low().unwrap();
-        delay.delay_us(500u16);
+        if button.is_low().unwrap() {
+            speaker.set_high().unwrap();
+            delay.delay_us(500u16);
+            speaker.set_low().unwrap();
+            delay.delay_us(500u16);
+        }
     }
 }

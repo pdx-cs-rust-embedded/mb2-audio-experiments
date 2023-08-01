@@ -5,9 +5,9 @@ This is the "hello world" of audio programs.
 
 There are several branches of interest here.
 
-* The `main` branch emits a 1KHz square
-  wave. Super-straightforward straight-line manipulation of
-  the speaker.
+* The `main` branch emits a 1KHz square wave while button A
+  is held down. Super-straightforward straight-line
+  manipulation of the speaker.
 
 * The `handrolled-pwm` branch tries to do programmatic PWM
   to make a sine wave. I never got it to work, but it's

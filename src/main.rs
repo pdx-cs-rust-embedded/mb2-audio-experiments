@@ -47,16 +47,16 @@ static SAMPLE: &[u8] = include_bytes!("sample.u8");
 static mut BUFFERS: [[u16; BLOCK_SIZE]; 2] = [[0; BLOCK_SIZE]; 2];
 const BLOCK_SIZE: usize = 16384;
 
-fn fill_array<I>(x: &mut I, a: &mut [u16])
+fn fill_array<I>(_x: &mut I, a: &mut [u16])
     where I: Iterator<Item=u16>
 {
-    for v in a {
-        *v = x.next().unwrap();
+    for (i, v) in a.iter_mut().enumerate() {
+        *v = libm::floorf(128.0 * libm::sinf(
+            2.0 * 3.14 * (i % 256) as f32 / 255.0
+        ) + 128.0) as u16;
     }
 }
 
-
-   
 #[entry]
 fn main() -> ! {
     rtt_init_print!();

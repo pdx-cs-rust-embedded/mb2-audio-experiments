@@ -108,7 +108,7 @@ fn main() -> ! {
 
     // Get an iterator over the sample to be played,
     // followed by zeros.
-    let mut sample = resample(SAMPLE.iter().cloned())
+    let mut sample = resample(SAMPLE.iter().cycle().cloned())
         .map(|s| s as u16 | 0x8000)
         .chain(core::iter::repeat(0u16));
 

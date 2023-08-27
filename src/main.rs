@@ -4,36 +4,35 @@
 mod resample;
 use resample::resample;
 
-/// This uses code from the microbit crate speaker-v2 demo.
-///
-/// This demo plays 8-bit audio — a sample hard-compiled
-/// into the code — out the speaker via high-frequency
-/// hardware PWM.
-///
-/// The chipping rate for the PWM (and thus the "sample
-/// rate" for the audio) is 62.5K samples/second. This means
-/// that the chipping noise is at the Nyquist frequency of
-/// 31.25KHz, which might be beyond what the speaker can do
-/// (it probably isn't) and should be above the likely human
-/// hearing range.
-///
-/// If we wanted a higher sample rate, we'd have to cut down
-/// the bits-per-sample: in the limiting case we'd end up
-/// with one bit per sample sigma-delta at 16MHz, which
-/// might actually be better but without modeling the output
-/// filtering would more likely be garbage.
-///
-/// If the Cargo feature `external_out` is enabled, this
-/// code will output to P0 on the MB2 edge connector instead
-/// of the speaker.
+//! This uses code from the microbit crate speaker-v2 demo.
+//!
+//! This demo plays 8-bit audio — a sample hard-compiled
+//! into the code — out the speaker via high-frequency
+//! hardware PWM.
+//!
+//! The chipping rate for the PWM (and thus the "sample
+//! rate" for the audio) is 62.5K samples/second. This means
+//! that the chipping noise is at the Nyquist frequency of
+//! 31.25KHz, which might be beyond what the speaker can do
+//! (it probably isn't) and should be above the likely human
+//! hearing range.
+//!
+//! If we wanted a higher sample rate, we'd have to cut down
+//! the bits-per-sample: in the limiting case we'd end up
+//! with one bit per sample sigma-delta at 16MHz, which
+//! might actually be better but without modeling the output
+//! filtering would more likely be garbage.
+//!
+//! If the Cargo feature `external_out` is enabled, this
+//! code will output to P0 on the MB2 edge connector instead
+//! of the speaker.
 
 use panic_rtt_target as _;
 
-use cortex_m::asm;
 use cortex_m_rt::entry;
 use microbit::hal::{gpio, pwm};
 use microbit::Board;
-use rtt_target::{rprintln, rtt_init_print};
+use rtt_target::rtt_init_print;
 
 // 8-bit unsigned audio data at 3906 samples per second.
 // 16× upsampling gives 62_496 samples per second rate,
@@ -129,7 +128,7 @@ fn main() -> ! {
             fill_array(&mut sample, buffer);
         }
 
-        // Start the sine wave.
+        // Start the playback
         speaker.load(Some(&BUFFERS[0]), Some(&BUFFERS[1]), true).unwrap()
     };
 
@@ -138,8 +137,6 @@ fn main() -> ! {
     loop {
         dma.reset_event(seq0_event);
         dma.reset_event(seq1_event);
-        //rprintln!("wfe");
-        //asm::wfe();
         while !dma.is_event_triggered(seq0_event) && !dma.is_event_triggered(seq1_event) {};
         if dma.is_event_triggered(seq0_event) {
             unsafe { fill_array(&mut sample, &mut BUFFERS[0]) };

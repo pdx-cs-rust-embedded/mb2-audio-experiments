@@ -7,8 +7,10 @@ edition = "2021"
 biquad = "0.4.2"
 cortex-m-rt = "0.7"
 libm = "0.2.7"
-microbit-v2 = { path = "/local/src/old/microbit/microbit-v2" }
 rtt-target = "0.4"
+
+[dependencies.microbit-v2]
+git = "http://github.com/BartMassey-upstream/microbit"
 
 [dependencies.panic-rtt-target]
 version = "0.1"

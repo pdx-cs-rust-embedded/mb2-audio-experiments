@@ -107,10 +107,10 @@ fn main() -> ! {
         .enable();
 
     // Get an iterator over the sample to be played,
-    // followed by zeros.
+    // repeating endlessly.
     let mut sample = resample(SAMPLE.iter().cloned())
         .map(|s| s as u16 | 0x8000)
-        .chain(core::iter::repeat(0u16));
+        .cycle();
 
     // The `unsafe`s here are to assure the Rust compiler
     // that nothing else is going to mess with this buffer
@@ -119,7 +119,6 @@ fn main() -> ! {
     // Safety: Because we are single-threaded, the only
     // thing that can access `SAMPS` once created is the HW
     // PWM unit, and it will be read-only access.
-
 
     let dma = unsafe { 
         for buffer in &mut BUFFERS {
@@ -135,8 +134,6 @@ fn main() -> ! {
     loop {
         dma.reset_event(seq0_event);
         dma.reset_event(seq1_event);
-        //rprintln!("wfe");
-        //asm::wfe();
         while !dma.is_event_triggered(seq0_event) && !dma.is_event_triggered(seq1_event) {};
         if dma.is_event_triggered(seq0_event) {
             unsafe { fill_array(&mut sample, &mut BUFFERS[0]) };

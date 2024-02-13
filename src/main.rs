@@ -12,6 +12,8 @@
 /// of the speaker. Attach an RC low-pass antialiasing filter
 /// and connect to an external speaker for quite decent audio.
 
+use core::f32::consts::PI;
+    
 use panic_rtt_target as _;
 
 use cortex_m_rt::entry;
@@ -31,8 +33,6 @@ fn silence(samples: &mut [u16], _f0: f32, _r: u32, q: fn(f32) -> u16) {
 /// converts from normalized `f32` values (-1..1) to 16-bit
 /// unsigned values.
 fn sine(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
-    use core::f32::consts::PI;
-    
     let dp = 1.0 / r as f32;
     for (i, s) in samples.iter_mut().enumerate() {
         let x = libm::sinf(2.0 * PI * f0 * (i as f32) * dp);
@@ -46,14 +46,33 @@ fn sine(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
 /// `f32` values (-1..1) to 16-bit unsigned values.
 // https://en.wikipedia.org/wiki/Chirp
 fn sweep(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
-    use core::f32::consts::PI;
-    
     let dp = 1.0 / r as f32;
     let ds = 1.0 / libm::logf(2.0);
     for (i, s) in samples.iter_mut().enumerate() {
         let p = libm::powf(2.0, i as f32 * dp);
         let x = libm::sinf(2.0 * PI * f0 * ds * (p - 1.0));
         *s = q(x);
+    }
+}
+
+/// Fill `samples` with a chord at root frequency `f0` given
+/// sample rate `r` sps.  The quantization function `q`
+/// converts from normalized `f32` values (-1..1) to 16-bit
+/// unsigned values.
+fn chord(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
+    let dp = 1.0 / r as f32;
+    let freqs = [
+        f0,
+        f0 * libm::powf(2.0, 4.0 / 12.0),
+        f0 * libm::powf(2.0, 7.0 / 12.0),
+    ];
+    let gain = 1.0 / freqs.len() as f32;
+    for (i, s) in samples.iter_mut().enumerate() {
+        let mut acc = 0.0;
+        for f in freqs {
+            acc += libm::sinf(2.0 * PI * f * (i as f32) * dp);
+        }
+        *s = q(acc * gain);
     }
 }
 
@@ -155,7 +174,7 @@ fn main() -> ! {
         led.set_high().unwrap();
     }
 
-    let waves = [silence, sine, sweep];
+    let waves = [silence, sine, sweep, chord];
     let n_waves = waves.len();
     let mut cur_wave = 0;
 

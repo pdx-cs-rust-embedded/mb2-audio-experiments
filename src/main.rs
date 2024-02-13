@@ -21,6 +21,8 @@ use microbit::hal::{prelude::*, gpio, pwm, delay};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
+const SAMPLE_RATE: u32 = 1_000_000;
+
 /// Fill `samples` with silence.
 fn silence(samples: &mut [u16], _f0: f32, _r: u32, q: fn(f32) -> u16) {
     for s in samples.iter_mut() {
@@ -77,10 +79,10 @@ fn chord(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
 }
 
 /// Convert the input sample from -1.0..1.0 to a
-/// half-amplitude u8 represented as u16.
+/// half-amplitude four-bit value represented as u16.
 fn conv(x: f32) -> u16 {
     let x = (0.5 * x + 1.0) * 0.5;
-    libm::floorf(x * 255.0) as u16
+    libm::floorf(x * 15.0) as u16
 }
 
 /// Set up the waveform. This has to be in RAM for the
@@ -93,7 +95,7 @@ fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
     g(
         unsafe { &mut SAMPS },
         1000.0,
-        62500,
+        SAMPLE_RATE,
         conv,
     );
 
@@ -125,8 +127,8 @@ fn main() -> ! {
     // Use the PWM peripheral to generate a waveform for the speaker
     // The base counter rate for the PWM is 16MHz.
     // https://jimmywongiot.com/2021/06/01/advanced-pulse-width-modulation-pwm-on-nordic-nrf52-series/
-    // This lets us run at 62500 sps with 256 ticks per sample, since 62500 * 256 = 16M.
-    // We can thus run 8-bit samples at this rate.
+    // This lets us run at 1M sps with 16 ticks per sample, since 1M * 16 = 16M.
+    // We can thus run 4-bit samples at this rate.
     let speaker = pwm::Pwm::new(board.PWM0);
     speaker
         // output the waveform on the speaker pin
@@ -140,7 +142,7 @@ fn main() -> ! {
         // Be sure to be advancing the thing.
         .set_step_mode(pwm::StepMode::Auto)
         // Set maximum duty cycle = PWM period in ticks.
-        .set_max_duty(255)
+        .set_max_duty((16_000_000 / SAMPLE_RATE) as u16 - 1)
         // Set no delay between samples.
         .set_seq_refresh(pwm::Seq::Seq0, 0)
         // Set no delay at end of sequence.

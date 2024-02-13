@@ -1,9 +1,12 @@
-# hello-audio: emit 1KHz square wave on MB2 speaker
-Bart Massey 2023
+# mb2-audio-experiments: audio output on the MicroBit v2
+Bart Massey 2024
 
-This is the "hello world" of audio programs.
+These are experiments with speaker and external audio on the
+MicroBit 2. The branches here started as branches of
+<https://github.com/pdx-cs-rust-embedded/hello-audio>, with
+which this repository shares a common root.
 
-There are several branches of interest here.
+There are many branches here. Several of note:
 
 * The `main` branch emits a 1KHz square wave while button A
   is held down. Super-straightforward straight-line

@@ -3,25 +3,14 @@
 
 /// This uses code from the microbit crate speaker-v2 demo.
 ///
-/// This demo plays 8-bit audio — a roughly 1043Hz C6 —
-/// out the speaker via high-frequency hardware PWM.
-///
-/// The chipping rate for the PWM (and thus the "sample
-/// rate" for the audio) is 62.5K samples/second. This means
-/// that the chipping noise is at the Nyquist frequency of
-/// 31.25KHz, which might be beyond what the speaker can do
-/// (it probably isn't) and should be above the likely human
-/// hearing range.
-///
-/// If we wanted a higher sample rate, we'd have to cut down
-/// the bits-per-sample: in the limiting case we'd end up
-/// with one bit per sample sigma-delta at 16MHz, which
-/// might actually be better but without modeling the output
-/// filtering would more likely be garbage.
+/// This tool plays audio out the speaker via high-frequency hardware PWM.
+/// It has lots of controls to adjust the audio, in an attempt to
+/// make the MB2 speaker work well.
 ///
 /// If the Cargo feature `external_out` is enabled, this
 /// code will output to P0 on the MB2 edge connector instead
-/// of the speaker.
+/// of the speaker. Attach an RC low-pass antialiasing filter
+/// and connect to an external speaker for quite decent audio.
 
 use panic_rtt_target as _;
 
@@ -31,18 +20,40 @@ use microbit::hal::{gpio, pwm};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
-/// Fill `samples` with `n` full cycles of samples of a sine
-/// wave, with samples quantized to `q` *values* 0..`q`-1.
-fn sine(samples: &mut [u16], q: u16, n: usize) {
+/// Fill `samples` with a sine wave at frequency `f0` given
+/// sample rate `r` sps.  The quantization function `q`
+/// converts from normalized `f32` values (-1..1) to 16-bit
+/// unsigned values.
+#[allow(unused)]
+fn sine<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
+    where Q: FnMut(f32) -> u16
+{
     use core::f32::consts::PI;
-    let step = 2.0 * PI * n as f32 / samples.len() as f32;
+    
+    let dp = 1.0 / r as f32;
     for (i, s) in samples.iter_mut().enumerate() {
-        // Get the next value.
-        let v = libm::sinf(i as f32 * step);
-        // Normalize to the range 0.0..=q-1.
-        let v = (q - 1) as f32 * (v + 1.0) / 2.0;
-        // Save a value in the range 0..=q-1.
-        *s = libm::floorf(v + 0.5) as u16;
+        let x = libm::sinf(2.0 * PI * f0 * (i as f32) * dp);
+        *s = q(x);
+    }
+}
+
+/// Fill `samples` with a 2-exponential sine sweep from
+/// starting frequency `f0` given sample rate `r` sps.
+/// The quantization function `q` converts from normalized
+/// `f32` values (-1..1) to 16-bit unsigned values.
+// https://en.wikipedia.org/wiki/Chirp
+#[allow(unused)]
+fn sweep<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
+    where Q: FnMut(f32) -> u16
+{
+    use core::f32::consts::PI;
+    
+    let dp = 1.0 / r as f32;
+    let ds = 1.0 / libm::logf(2.0);
+    for (i, s) in samples.iter_mut().enumerate() {
+        let p = libm::powf(2.0, i as f32 * dp);
+        let x = libm::sinf(2.0 * PI * f0 * ds * (p - 1.0));
+        *s = q(x);
     }
 }
 
@@ -89,7 +100,7 @@ fn main() -> ! {
         .enable_channel(pwm::Channel::C0)
         // Enable sample group.
         .enable_group(pwm::Group::G0)
-        // Keep playing forever.
+        // Stop after each playback.
         .loop_inf()
         // Enable PWM.
         .enable();
@@ -106,13 +117,14 @@ fn main() -> ! {
     // PWM unit to access it. It needs to be a 16-bit buffer
     // even though we will have only 8-bit (ish) sample
     // resolution.
-    static mut SAMPS: [u16; 240] = [0; 240];
+    static mut SAMPS: [u16; 31_250] = [0; 31_250];
     unsafe {
-        // We generate the sine wave with a little
-        // "headroom": want all values between 1 and 254 to
-        // make sure the HW PWM doesn't get lost and does
-        // output some energy on every cycle.
-        sine(&mut SAMPS, 256, 4);
+        sweep(
+            &mut SAMPS,
+            1000.0,
+            62500,
+            |x| libm::floorf(x * 127.0 + 127.0) as u16
+        );
         for s in &mut SAMPS {
             // The default counter mode is to set low up to
             // the count, then set high until the end of the
@@ -126,8 +138,9 @@ fn main() -> ! {
         }
     };
 
-    // Start the sine wave.
-    let _pwm_seq = unsafe { speaker.load(Some(&SAMPS), Some(&SAMPS), true).unwrap() };
+    // Start the sweep.
+    let samps = unsafe { SAMPS.as_ref() };
+    let _pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
 
     loop {
         asm::wfi();

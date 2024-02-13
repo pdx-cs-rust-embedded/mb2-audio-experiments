@@ -87,7 +87,7 @@ fn main() -> ! {
         // Be sure to be advancing the thing.
         .set_step_mode(pwm::StepMode::Auto)
         // Set maximum duty cycle = PWM period in ticks.
-        .set_max_duty(256)
+        .set_max_duty(255)
         // Set no delay between samples.
         .set_seq_refresh(pwm::Seq::Seq0, 0)
         // Set no delay at end of sequence.
@@ -119,26 +119,26 @@ fn main() -> ! {
     // resolution.
     static mut SAMPS: [u16; 31_250] = [0; 31_250];
     unsafe {
-        sweep(
+        sine(
             &mut SAMPS,
             1000.0,
             62500,
-            |x| libm::floorf(x * 127.0 + 127.0) as u16
+            |x| {
+                let x = (0.5 * x + 1.0) * 0.5;
+                libm::floorf(x * 255.0) as u16
+            }
         );
         for s in &mut SAMPS {
             // The default counter mode is to set low up to
             // the count, then set high until the end of the
             // cycle. Setting the high bit in the count
             // register inverts this (and is otherwise
-            // ignored), giving a "right-side-up" sine wave.
-            //
-            // We could instead complement all the sine
-            // values, but either way works.
+            // ignored).
             *s |= 0x8000;
         }
     };
 
-    // Start the sweep.
+    // Start the sound.
     let samps = unsafe { SAMPS.as_ref() };
     let _pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
 

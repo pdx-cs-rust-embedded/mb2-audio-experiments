@@ -21,7 +21,10 @@ use microbit::hal::{prelude::*, gpio, pwm, delay};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
-const SAMPLE_RATE: u32 = 1_000_000;
+const SAMPLE_RATE: u32 = 125_000;
+const BASE_FREQ: f32 = 1000.0;
+const TARGET_BUFFER_LENGTH: usize = 16_384;
+const SAMPLE_RANGE: u32 = 16_000_000 / SAMPLE_RATE;
 
 /// Fill `samples` with silence.
 fn silence(samples: &mut [u16], _f0: f32, _r: u32, q: fn(f32) -> u16) {
@@ -82,7 +85,7 @@ fn chord(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
 /// half-amplitude four-bit value represented as u16.
 fn conv(x: f32) -> u16 {
     let x = (0.5 * x + 1.0) * 0.5;
-    libm::floorf(x * 15.0) as u16
+    libm::floorf(x * (SAMPLE_RANGE - 1) as f32) as u16
 }
 
 /// Set up the waveform. This has to be in RAM for the
@@ -90,11 +93,18 @@ fn conv(x: f32) -> u16 {
 /// even though we will have only 8-bit (ish) sample
 /// resolution.
 fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
-    static mut SAMPS: [u16; 31_250] = [0; 31_250];
+    // Length of 1 cycle of waveform.
+    const CYCLE: usize = (SAMPLE_RATE / BASE_FREQ as u32) as usize;
+    // Fit as many cycles into buffer as is feasible to allow for
+    // polyphony.
+    const LEN: usize = (TARGET_BUFFER_LENGTH / CYCLE) * CYCLE;
+    static mut SAMPS: [u16; LEN] = [0; LEN];
+
+    // Safety: This is just Rust being dumb about globals.
 
     g(
         unsafe { &mut SAMPS },
-        1000.0,
+        BASE_FREQ,
         SAMPLE_RATE,
         conv,
     );

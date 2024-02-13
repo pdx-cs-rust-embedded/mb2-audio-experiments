@@ -14,9 +14,8 @@
 
 use panic_rtt_target as _;
 
-use cortex_m::asm;
 use cortex_m_rt::entry;
-use microbit::hal::{gpio, pwm};
+use microbit::hal::{prelude::*, gpio, pwm, delay};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
@@ -95,7 +94,7 @@ fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
-    let board = Board::take().unwrap();
+    let mut board = Board::take().unwrap();
 
     // Set up the speaker GPIO pin as an output.
     #[cfg(not(feature = "external_out"))]
@@ -140,12 +139,55 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    let waves = [silence, sine, sweep];
-    let cur_wave = 2;
+    let button_a = board.buttons.button_a.degrade();
+    let button_b = board.buttons.button_b.degrade();
+    let mut delay = delay::Delay::new(board.SYST);
 
+    board.display_pins.row1.set_high().unwrap();
+    let mut leds = [
+        board.display_pins.col1.degrade(),
+        board.display_pins.col2.degrade(),
+        board.display_pins.col3.degrade(),
+        board.display_pins.col4.degrade(),
+        board.display_pins.col5.degrade(),
+    ];
+    for led in &mut leds {
+        led.set_high().unwrap();
+    }
+
+    let waves = [silence, sine, sweep];
+    let n_waves = waves.len();
+    let mut cur_wave = 0;
+
+    leds[cur_wave].set_low().unwrap();
     let samps = make_wave(waves[cur_wave]);
-    let _pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
+    let mut pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
     loop {
-        asm::wfi();
+        let a = button_a.is_low().unwrap();
+        let b = button_b.is_low().unwrap();
+        if a || b {
+            let mut button_release = |b: &gpio::Pin<gpio::Input<gpio::Floating>>| {
+                delay.delay_us(10_000u16);
+                while b.is_low().unwrap() {
+                    delay.delay_us(1000u16);
+                }
+            };
+
+            let prev_wav = cur_wave;
+            if b {
+                cur_wave = (cur_wave + n_waves + 1) % n_waves;
+                leds[cur_wave].set_low().unwrap();
+                button_release(&button_b);
+            } else {
+                cur_wave = (cur_wave + n_waves - 1) % n_waves;
+                leds[cur_wave].set_low().unwrap();
+                button_release(&button_a);
+            }
+            pwm_seq.stop();
+            let (_, _, speaker) = pwm_seq.split();
+            let samps = make_wave(waves[cur_wave]);
+            pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
+            leds[prev_wav].set_high().unwrap();
+        }
     }
 }

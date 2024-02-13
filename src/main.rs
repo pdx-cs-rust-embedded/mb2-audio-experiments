@@ -20,14 +20,18 @@ use microbit::hal::{gpio, pwm};
 use microbit::Board;
 use rtt_target::rtt_init_print;
 
+/// Fill `samples` with silence.
+fn silence(samples: &mut [u16], _f0: f32, _r: u32, q: fn(f32) -> u16) {
+    for s in samples.iter_mut() {
+        *s = q(0.0);
+    }
+}
+
 /// Fill `samples` with a sine wave at frequency `f0` given
 /// sample rate `r` sps.  The quantization function `q`
 /// converts from normalized `f32` values (-1..1) to 16-bit
 /// unsigned values.
-#[allow(unused)]
-fn sine<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
-    where Q: FnMut(f32) -> u16
-{
+fn sine(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
     use core::f32::consts::PI;
     
     let dp = 1.0 / r as f32;
@@ -42,10 +46,7 @@ fn sine<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
 /// The quantization function `q` converts from normalized
 /// `f32` values (-1..1) to 16-bit unsigned values.
 // https://en.wikipedia.org/wiki/Chirp
-#[allow(unused)]
-fn sweep<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
-    where Q: FnMut(f32) -> u16
-{
+fn sweep(samples: &mut [u16], f0: f32, r: u32, q: fn(f32) -> u16) {
     use core::f32::consts::PI;
     
     let dp = 1.0 / r as f32;
@@ -56,6 +57,40 @@ fn sweep<Q>(samples: &mut [u16], f0: f32, r: u32, mut q: Q)
         *s = q(x);
     }
 }
+
+/// Convert the input sample from -1.0..1.0 to a
+/// half-amplitude u8 represented as u16.
+fn conv(x: f32) -> u16 {
+    let x = (0.5 * x + 1.0) * 0.5;
+    libm::floorf(x * 255.0) as u16
+}
+
+/// Set up the waveform. This has to be in RAM for the
+/// PWM unit to access it. It needs to be a 16-bit buffer
+/// even though we will have only 8-bit (ish) sample
+/// resolution.
+fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
+    static mut SAMPS: [u16; 31_250] = [0; 31_250];
+
+    g(
+        unsafe { &mut SAMPS },
+        1000.0,
+        62500,
+        conv,
+    );
+
+    for s in unsafe { &mut SAMPS } {
+        // The default counter mode is to set low up to
+        // the count, then set high until the end of the
+        // cycle. Setting the high bit in the count
+        // register inverts this (and is otherwise
+        // ignored).
+        *s |= 0x8000;
+    }
+
+    unsafe { SAMPS.as_ref() }
+}
+
 
 #[entry]
 fn main() -> ! {
@@ -105,43 +140,11 @@ fn main() -> ! {
         // Enable PWM.
         .enable();
 
-    // The `unsafe`s here are to assure the Rust compiler
-    // that nothing else is going to mess with this buffer
-    // while a mutable reference is held.
-    //
-    // Safety: Because we are single-threaded, the only
-    // thing that can access `SAMPS` once created is the HW
-    // PWM unit, and it will be read-only access.
+    let waves = [silence, sine, sweep];
+    let cur_wave = 2;
 
-    // Set up the sine wave. This has to be in RAM for the
-    // PWM unit to access it. It needs to be a 16-bit buffer
-    // even though we will have only 8-bit (ish) sample
-    // resolution.
-    static mut SAMPS: [u16; 31_250] = [0; 31_250];
-    unsafe {
-        sine(
-            &mut SAMPS,
-            1000.0,
-            62500,
-            |x| {
-                let x = (0.5 * x + 1.0) * 0.5;
-                libm::floorf(x * 255.0) as u16
-            }
-        );
-        for s in &mut SAMPS {
-            // The default counter mode is to set low up to
-            // the count, then set high until the end of the
-            // cycle. Setting the high bit in the count
-            // register inverts this (and is otherwise
-            // ignored).
-            *s |= 0x8000;
-        }
-    };
-
-    // Start the sound.
-    let samps = unsafe { SAMPS.as_ref() };
+    let samps = make_wave(waves[cur_wave]);
     let _pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
-
     loop {
         asm::wfi();
     }

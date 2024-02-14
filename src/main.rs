@@ -165,7 +165,7 @@ fn main() -> ! {
         .enable_channel(pwm::Channel::C0)
         // Enable sample group.
         .enable_group(pwm::Group::G0)
-        // Stop after each playback.
+        // Loop after each playback.
         .loop_inf()
         // Enable PWM.
         .enable();

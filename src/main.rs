@@ -92,7 +92,12 @@ fn conv(x: f32) -> u16 {
 /// PWM unit to access it. It needs to be a 16-bit buffer
 /// even though we will have only 8-bit (ish) sample
 /// resolution.
-fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
+///
+/// # Safety
+///
+/// Do not call this while the PWM unit is running and reading
+/// from a previously-returned sample buffer.
+unsafe fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
     // Length of 1 cycle of waveform.
     const CYCLE: usize = (SAMPLE_RATE / BASE_FREQ as u32) as usize;
     // Fit as many cycles into buffer as is feasible to allow for
@@ -100,16 +105,14 @@ fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
     const LEN: usize = (TARGET_BUFFER_LENGTH / CYCLE) * CYCLE;
     static mut SAMPS: [u16; LEN] = [0; LEN];
 
-    // Safety: This is just Rust being dumb about globals.
-
     g(
-        unsafe { &mut SAMPS },
+        &mut SAMPS,
         BASE_FREQ,
         SAMPLE_RATE,
         conv,
     );
 
-    for s in unsafe { &mut SAMPS } {
+    for s in &mut SAMPS {
         // The default counter mode is to set low up to
         // the count, then set high until the end of the
         // cycle. Setting the high bit in the count
@@ -118,7 +121,7 @@ fn make_wave(g: fn(&mut [u16], f32, u32, fn(f32) -> u16)) -> &'static [u16] {
         *s |= 0x8000;
     }
 
-    unsafe { SAMPS.as_ref() }
+    SAMPS.as_ref()
 }
 
 
@@ -190,8 +193,11 @@ fn main() -> ! {
     let n_waves = waves.len();
     let mut cur_wave = 0;
 
+    // Safety: We carefully do not generate a new waveform
+    // while the old one is being read by the PWM.
+
     leds[cur_wave].set_low().unwrap();
-    let samps = make_wave(waves[cur_wave]);
+    let mut samps = unsafe { make_wave(waves[cur_wave]) };
     let mut pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
     loop {
         let a = button_a.is_low().unwrap();
@@ -208,15 +214,17 @@ fn main() -> ! {
             if b {
                 cur_wave = (cur_wave + n_waves + 1) % n_waves;
                 leds[cur_wave].set_low().unwrap();
+                pwm_seq.stop();
+                samps = unsafe { make_wave(waves[cur_wave]) };
                 button_release(&button_b);
             } else {
                 cur_wave = (cur_wave + n_waves - 1) % n_waves;
                 leds[cur_wave].set_low().unwrap();
+                pwm_seq.stop();
+                samps = unsafe { make_wave(waves[cur_wave]) };
                 button_release(&button_a);
             }
-            pwm_seq.stop();
             let (_, _, speaker) = pwm_seq.split();
-            let samps = make_wave(waves[cur_wave]);
             pwm_seq = speaker.load(Some(samps), Some(samps), true).unwrap();
             leds[prev_wav].set_high().unwrap();
         }

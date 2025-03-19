@@ -1,5 +1,6 @@
 #![no_main]
 #![no_std]
+#![allow(static_mut_refs)]
 
 mod resample;
 use resample::resample;
@@ -29,11 +30,10 @@ use resample::resample;
 
 use panic_rtt_target as _;
 
-use cortex_m::asm;
 use cortex_m_rt::entry;
 use microbit::hal::{gpio, pwm};
 use microbit::Board;
-use rtt_target::{rprintln, rtt_init_print};
+use rtt_target::rtt_init_print;
 
 // 8-bit unsigned audio data at 3906 samples per second.
 // 16× upsampling gives 62_496 samples per second rate,

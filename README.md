@@ -22,6 +22,8 @@ There are many branches here. Several of note:
 * The `v2-speaker-demo` branch is a cleaned-up clone of the
   `microbit` crate example `v2-speaker`.
 
+* The `loop` branch repeatedly plays a short sample.
+
 # Acknowledgements
 
 Thanks to the `microbit` crate authors for a demo to get

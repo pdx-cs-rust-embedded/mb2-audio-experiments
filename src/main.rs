@@ -54,8 +54,6 @@ fn fill_array<I>(x: &mut I, a: &mut [u16])
         *v = x.next().unwrap();
     }
 }
-
-
    
 #[entry]
 fn main() -> ! {

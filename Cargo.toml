@@ -4,15 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-biquad = "0.4.2"
+biquad = "0.5.0"
 cortex-m-rt = "0.7"
-libm = "0.2.7"
-microbit-v2 = "0.13.0"
-rtt-target = "0.4"
-
-[dependencies.panic-rtt-target]
-version = "0.1"
-features = ["cortex-m"]
+libm = "0.2.15"
+microbit-v2 = "0.15.1"
+rtt-target = "0.6"
+panic-rtt-target = "0.2"
 
 [dependencies.cortex-m]
 version = "0.7"

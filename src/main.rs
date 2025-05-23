@@ -65,7 +65,7 @@ fn main() -> ! {
     let speaker_pin = board.speaker_pin;
     #[cfg(feature = "external_out")]
     // Send output to edge connector P0 instead of speaker pin.
-    let speaker_pin = board.pins.p0_02;
+    let speaker_pin = board.edge.e00;
     let speaker_pin = speaker_pin.into_push_pull_output(gpio::Level::High);
 
     // Use the PWM peripheral to generate a waveform for the speaker
